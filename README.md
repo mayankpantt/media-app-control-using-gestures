@@ -23,8 +23,9 @@ This project uses Mediapipe and OpenCV to recognize hand gestures and control me
 - Make sure your webcam is turned on and you're in a well-lit environment
 
 **Use the following hand gestures to control your computer:**
+![image](https://github.com/user-attachments/assets/b4b890bc-92d7-48d2-8544-ec933c7d67b7)
 
-![](Aspose.Words.f60ae627-a6a7-435e-8892-9b3a94cc49ef.001.png)
+
 
 **Features**
 
