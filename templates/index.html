@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Control Web App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            text-align: center;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-top: 20px;
+            font-size: 2.5em;
+            color: #38bdf8;
+        }
+        p {
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            color: #94a3b8;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #3b82f6;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        button:hover {
+            background-color: #2563eb;
+            transform: translateY(-2px);
+        }
+        #video {
+            width: 80%;
+            max-width: 600px;
+            border-radius: 12px;
+            margin-top: 20px;
+            display: none;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+        #gesture-status {
+            margin-top: 20px;
+            font-size: 1.4em;
+            color: #facc15;
+            background-color: #1e293b;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #gesture-history, #gesture-chart-container {
+            margin-top: 20px;
+            background-color: #1e293b;
+            padding: 15px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            text-align: left;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        canvas {
+            margin-top: 15px;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.8em;
+            }
+            button {
+                padding: 10px 16px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🖐️ Gesture Control Web App</h1>
+    <p>Control your media & brightness using hand gestures!</p>
+    <div>
+        <button onclick="startStream()">Start Stream</button>
+        <button onclick="stopStream()">Stop Stream</button>
+        <button onclick="clearHistory()">Clear History</button>
+    </div>
+    <img id="video" src="" alt="Video Stream">
+    <div id="gesture-status">Current Gesture: None</div>
+    <div id="gesture-history"><strong>Gesture History:</strong><br>No gestures yet.</div>
+    <div id="gesture-chart-container">
+        <strong>Gesture Counts:</strong>
+        <canvas id="gestureChart"></canvas>
+    </div>
+
+    <script>
+        let gestureInterval;
+        let gestureChart;
+
+        function initializeChart() {
+            const ctx = document.getElementById('gestureChart').getContext('2d');
+            if (gestureChart) return;
+            gestureChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Gesture Count',
+                        data: [],
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: {
+                        duration: 500
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(counts) {
+            if (!counts || Object.keys(counts).length === 0) return;
+            const labels = Object.keys(counts);
+            const data = Object.values(counts);
+
+            gestureChart.data.labels = labels;
+            gestureChart.data.datasets[0].data = data;
+            gestureChart.update();
+        }
+
+        function clearHistory() {
+            fetch('/clear_history', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    document.getElementById('gesture-history').innerHTML = '<strong>Gesture History:</strong><br>No gestures yet.';
+                    if (gestureChart) {
+                        gestureChart.data.labels = [];
+                        gestureChart.data.datasets[0].data = [];
+                        gestureChart.update();
+                    }
+                });
+        }
+
+        function startStream() {
+            fetch('/start_stream', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    const video = document.getElementById('video');
+                    video.src = '/video_feed';
+                    video.style.display = 'block';
+                    initializeChart();
+                    startGesturePolling();
+                });
+        }
+
+        function stopStream() {
+            fetch('/stop_stream', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    const video = document.getElementById('video');
+                    video.src = '';
+                    video.style.display = 'none';
+                    stopGesturePolling();
+                    document.getElementById('gesture-status').innerText = 'Current Gesture: None';
+                });
+        }
+
+        function startGesturePolling() {
+            gestureInterval = setInterval(() => {
+                fetch('/get_gesture_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('gesture-status').innerText = 'Current Gesture: ' + data.gesture;
+
+                        if (data.history && data.history.length > 0) {
+                            document.getElementById('gesture-history').innerHTML = '<strong>Gesture History:</strong><br>' + data.history.map(g => '✅ ' + g).join('<br>');
+                        }
+
+                        if (data.counts && Object.keys(data.counts).length > 0) {
+                            updateChart(data.counts);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching gesture data:', err));
+            }, 500);
+        }
+
+        function stopGesturePolling() {
+            clearInterval(gestureInterval);
+        }
+    </script>
+</body>
+</html>
